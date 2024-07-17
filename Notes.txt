@@ -1,0 +1,9 @@
+./configure --build x86_64-pc-linux-gnu --host arm-linux-gnueabi
+make LDFLAGS="--static"
+
+stty -F /dev/ttyACM0 115200
+/tmp/socat /dev/ttyACM0,raw,echo=0,nonblock tcp4-listen:8888,bind=127.0.0.1,reuseaddr,fork,nodelay
+while true; do /tmp/socat /dev/ttyACM0,raw,echo=0,nonblock tcp4-listen:8888,bind=127.0.0.1,reuseaddr,nodelay; done
+
+Prod: ssh -L 8888:127.0.0.1:8888 root@83.133.178.86
+Test: ssh -L 8888:127.0.0.1:8888 root@192.168.178.244
