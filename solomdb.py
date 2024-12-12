@@ -115,6 +115,19 @@ class SoloMDB(object):
 
         return req.json()
 
+    def cancel_payment(self):
+        merchant_code = self._get_merchant_profile()
+        reader_id = self.config.get('reader')
+
+        req = requests.post(
+            f'https://api.sumup.com/v0.1/merchants/{merchant_code}/readers/{reader_id}/terminate',
+            headers=self.__sumup_headers(),
+        )
+
+        req.raise_for_status()
+
+        return True
+
     def refund_payment(self, transaction_code: str):
         req = requests.post(
             f'https://api.sumup.com/v0.1/me/refund/{transaction_code}',
@@ -162,6 +175,10 @@ class MDBLineReader(LineReader):
         self.solomdb = SoloMDB()
         self.transport = None
 
+    def write_line(self, text: str) -> None:
+        sys.stdout.write('line sent: {}\n'.format(repr(text)))
+        return super().write_line(text)
+
     def connection_made(self, transport):
         super(MDBLineReader, self).connection_made(transport)
         self.transport = transport
@@ -184,6 +201,9 @@ class MDBLineReader(LineReader):
                 print(f'Payment Status for {self.solomdb.payment_uuid} is {payment_status}')
                 match payment_status:
                     case 'PENDING':
+                        if self.solomdb.should_cancel:
+                            print('Trying to cancel payment on reader')
+                            self.solomdb.cancel_payment()
                         pass
                     case 'FAILED' | 'CANCELLED':
                         self.solomdb.clear_payment_status()
@@ -227,9 +247,14 @@ class MDBLineReader(LineReader):
                     case 'SET':
                         pass
                     case 'ERR':
-                        # Fixme c,ERR,VEND 3...
-                        print("An error occurred, stopping interface")
-                        self.write_line('C,0')
+                        match payload[1]:
+                            case 'VEND 1':
+                                if self.solomdb.payment_uuid is not None:
+                                    self.solomdb.should_cancel = True
+                            # Fixme c,ERR,VEND 3...
+                            case _:
+                                print("An error occurred, stopping interface")
+                                self.write_line('C,0')
                     case 'STATUS':
                         self.solomdb.mdb_status = payload[1]
                         match payload[1]:
@@ -247,6 +272,10 @@ class MDBLineReader(LineReader):
                                     self.solomdb.start_payment(amount)
                                     Thread(target=self.payment_thread).start()
                             case 'IDLE':
+                                # Should stop and refund payment
+                                if self.solomdb.payment_uuid:
+                                    self.solomdb.should_cancel = True
+                            case 'DISABLED':
                                 # Should stop and refund payment
                                 if self.solomdb.payment_uuid:
                                     self.solomdb.should_cancel = True
