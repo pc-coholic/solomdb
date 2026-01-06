@@ -55,7 +55,7 @@ class SoloMDB(object):
 
         return self.config.get('merchant_code')
 
-    def pair_reader(self, pairing_code: str):
+    def pair_reader(self, pairing_code: str, pairing_name: str):
         merchant_code = self._get_merchant_profile()
 
         req = requests.post(
@@ -63,6 +63,7 @@ class SoloMDB(object):
             headers=self.__sumup_headers(),
             json={
                 'pairing_code': pairing_code,
+                'name': pairing_name
             }
         )
 
@@ -318,6 +319,7 @@ class SoloMDBHTTPServer(HTTPServer):
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--pair-reader', action='store', dest='pairing_code')
+    argparser.add_argument('--name', action='store', dest='pairing_name')
     argparser.add_argument('--host', action='store', dest='host', default='0.0.0.0')
     argparser.add_argument('--port', action='store', dest='port', type=int, default=8000)
     args = argparser.parse_args()
@@ -325,7 +327,7 @@ if __name__ == '__main__':
     solomdb = SoloMDB()
 
     if args.pairing_code:
-        solomdb.pair_reader(args.pairing_code)
+        solomdb.pair_reader(args.pairing_code, args.pairing_name)
         sys.exit()
 
     httpd = SoloMDBHTTPServer((args.host, args.port), RequestHandler, solomdb)
