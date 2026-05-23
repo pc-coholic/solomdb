@@ -187,6 +187,7 @@ class MDBLineReader(LineReader):
         self.write_line('C,0')
         self.write_line('C,SETCONF,mdb-currency-code=0x1978')
         self.write_line('C,SETCONF,mdb-always-idle=1')
+        # self.write_line('X,1')
         self.write_line('C,1')
 
     def payment_thread(self):
@@ -285,6 +286,9 @@ class MDBLineReader(LineReader):
                             print("Payment successful, Distribution successful")
                             self.solomdb.clear_payment_status()
             case 'r':
+                pass
+
+            case 'x':
                 pass
 
     def connection_lost(self, exc):
