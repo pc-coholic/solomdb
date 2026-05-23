@@ -1,5 +1,6 @@
 import codecs
 import sys
+from decimal import Decimal
 
 from serial.threaded import FramedPacket
 
@@ -79,38 +80,50 @@ class Waferstar(FramedPacket, GenericMdb):
                             int.from_bytes(price[1], "big"),
                         ]
 
-                        ## FIXME:
-                        # if amount < Decimal("1.0"):
-                        #    print("Ignoring request for amount < 1.00 EUR")
-                        # else:
-                        #    self.solomdb.vend_amount = amount
-                        #    self.solomdb.start_payment(amount)
+                        amount = Decimal((price[0] << 8) | price[1]) / Decimal("100")
+                        self.solomdb.mdb_status = "VEND"
+                        print(f"Requesting payment of {amount}")
 
-                        # approve with same price:
-                        self.send_command([0x05] + price)
-                        # reject:
-                        # self.send_command([0x06])
+                        if self.solomdb.payment_uuid is not None:
+                            print(
+                                f"Previous payment_uuid {self.solomdb.payment_uuid} present; not charging again"
+                            )
+                            # Same price, we can reuse the payment
+                            if amount == Decimal(self.solomdb.vend_amount):
+                                self.solomdb.should_cancel = False
+                        elif amount < Decimal("1.0"):
+                            print("Rejecting request for amount < 1.00 EUR")
+                            self.send_command([0x06])  # reject
+                        else:
+                            self.solomdb.vend_amount = amount
+                            self.solomdb.start_payment(amount)
                     case b"\x01":
                         print("Vend Cancel")
+                        if self.solomdb.payment_uuid:
+                            self.solomdb.should_cancel = True
                     case b"\x02":
                         print("Vend Success")
+                        self.solomdb.clear_payment_status()
                     case b"\x03":
                         print("Vend Failure")
+                        if self.solomdb.payment_uuid:
+                            self.solomdb.should_cancel = True
                     case b"\x04":
                         print("Session Complete")
                         # end session
                         self.send_command([0x07])
                     case _:
                         print("Unchecked Reader subcommand")
-
-                # approve
-                # session end
             case b"\x14":  # Reader
                 match subcmd:
                     case b"\x00":
                         print("Reader disabled")
+                        self.solomdb.mdb_status = "DISABLED"
+                        if self.solomdb.payment_uuid:
+                            self.solomdb.should_cancel = True
                     case b"\x01":
                         print("Reader enabled")
+                        self.solomdb.mdb_status = "IDLE"
                     case b"\x02":
                         print("Reader cancel")
                         self.send_command([0x08])
@@ -211,5 +224,7 @@ class Waferstar(FramedPacket, GenericMdb):
         sys.stdout.write("port closed\n")
 
     def approve(self, payment_amount):
-        # FIXME: payment amount as two fields
-        self.send_command([0x05] + payment_amount)
+        price_cents = int(Decimal(str(payment_amount)) * 100)
+        price_hi = (price_cents >> 8) & 0xFF
+        price_lo = price_cents & 0xFF
+        self.send_command([0x05, price_hi, price_lo])
