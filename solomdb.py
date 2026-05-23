@@ -4,8 +4,9 @@ import configparser
 import sys
 import time
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from threading import Thread
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 import serial
@@ -54,14 +55,15 @@ class SoloMDB(object):
 
         return self.config.get('merchant_code')
 
-    def pair_reader(self, pairing_code: str):
+    def pair_reader(self, pairing_code: str, pairing_name: str):
         merchant_code = self._get_merchant_profile()
 
         req = requests.post(
-            f'https://api.sumup.com//v0.1/merchants/{merchant_code}/readers',
+            f'https://api.sumup.com/v0.1/merchants/{merchant_code}/readers',
             headers=self.__sumup_headers(),
             json={
                 'pairing_code': pairing_code,
+                'name': pairing_name
             }
         )
 
@@ -79,16 +81,23 @@ class SoloMDB(object):
     def start_payment(self, amount: Decimal):
         payment_uuid = str(uuid.uuid4())
 
+        value = int(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) * 100)
+
         req = requests.post(
-            f'https://api.sumup.com/v0.1/terminals/{self.config.get("reader")}/checkout',
+            f'https://api.sumup.com/v0.1/merchants/{self.config.get("merchant_code")}/readers/{self.config.get("reader")}/checkout',
             headers=self.__sumup_headers(),
             json={
-                'client_id': payment_uuid,
-                'amount': amount,
-                'currency': self.config.get('currency'),
-                # 'return_url': '',
-                # 'card_type': 'credit' or 'debit',
-                # 'installments': 1,
+                'affiliate': {
+                  'app_id': self.config.get('affiliate_app_id'),
+                  'key': self.config.get('affiliate_key'),
+                  'foreign_transaction_id': payment_uuid
+                },
+                'total_amount': {
+                  'currency': self.config.get('currency'),
+                  'value': value,
+                  'minor_unit': 2
+                },
+                'description': 'Snack'
             }
         )
 
@@ -99,13 +108,26 @@ class SoloMDB(object):
 
     def get_payment(self, payment_uuid: str):
         req = requests.get(
-            f'https://api.sumup.com/v0.1/me/transactions?client_transaction_id={payment_uuid}',
+            f'https://api.sumup.com/v0.1/me/transactions?foreign_transaction_id={payment_uuid}',
             headers=self.__sumup_headers(),
         )
 
         req.raise_for_status()
 
         return req.json()
+
+    def cancel_payment(self):
+        merchant_code = self._get_merchant_profile()
+        reader_id = self.config.get('reader')
+
+        req = requests.post(
+            f'https://api.sumup.com/v0.1/merchants/{merchant_code}/readers/{reader_id}/terminate',
+            headers=self.__sumup_headers(),
+        )
+
+        req.raise_for_status()
+
+        return True
 
     def refund_payment(self, transaction_code: str):
         req = requests.post(
@@ -135,11 +157,17 @@ class SoloMDB(object):
 
     def start_mdb(self):
         self.mdb_thread.start()
+        # self.mdb_thread.join()
+
+    def join(self):
         self.mdb_thread.join()
 
     def stop_mdb(self):
         self.mdb_thread.write('C,0\n'.encode('UTF-8'))
         self.mdb_thread.close()
+
+    def start_session(self):
+        self.mdb_thread.write('C,START,99.99\n'.encode('UTF-8'))
 
 
 class MDBLineReader(LineReader):
@@ -148,6 +176,10 @@ class MDBLineReader(LineReader):
         self.solomdb = SoloMDB()
         self.transport = None
 
+    def write_line(self, text: str) -> None:
+        sys.stdout.write('line sent: {}\n'.format(repr(text)))
+        return super().write_line(text)
+
     def connection_made(self, transport):
         super(MDBLineReader, self).connection_made(transport)
         self.transport = transport
@@ -155,6 +187,7 @@ class MDBLineReader(LineReader):
         self.write_line('C,0')
         self.write_line('C,SETCONF,mdb-currency-code=0x1978')
         self.write_line('C,SETCONF,mdb-always-idle=1')
+        # self.write_line('X,1')
         self.write_line('C,1')
 
     def payment_thread(self):
@@ -170,6 +203,9 @@ class MDBLineReader(LineReader):
                 print(f'Payment Status for {self.solomdb.payment_uuid} is {payment_status}')
                 match payment_status:
                     case 'PENDING':
+                        if self.solomdb.should_cancel:
+                            print('Trying to cancel payment on reader')
+                            self.solomdb.cancel_payment()
                         pass
                     case 'FAILED' | 'CANCELLED':
                         self.solomdb.clear_payment_status()
@@ -213,14 +249,19 @@ class MDBLineReader(LineReader):
                     case 'SET':
                         pass
                     case 'ERR':
-                        # Fixme c,ERR,VEND 3...
-                        print("An error occurred, stopping interface")
-                        self.write_line('C,0')
+                        match payload[1]:
+                            case 'VEND 1':
+                                if self.solomdb.payment_uuid is not None:
+                                    self.solomdb.should_cancel = True
+                            # Fixme c,ERR,VEND 3...
+                            case _:
+                                print("An error occurred, stopping interface")
+                                self.write_line('C,0')
                     case 'STATUS':
                         self.solomdb.mdb_status = payload[1]
                         match payload[1]:
                             case 'VEND':
-                                amount = payload[2]
+                                amount = Decimal(payload[2])
                                 print(f'Requesting payment of {amount}')
                                 if self.solomdb.payment_uuid is not None:
                                     print(f'Previous payment_uuid {self.solomdb.payment_uuid} present; not charging again')
@@ -229,10 +270,17 @@ class MDBLineReader(LineReader):
                                     if Decimal(amount) == Decimal(self.solomdb.vend_amount):
                                         self.solomdb.should_cancel = False
                                 else:
-                                    self.solomdb.vend_amount = amount
-                                    self.solomdb.start_payment(amount)
-                                    Thread(target=self.payment_thread).start()
+                                    if amount < Decimal('1.0'):
+                                        print('Ignoring request for amount < 1.00 EUR')
+                                    else:
+                                        self.solomdb.vend_amount = amount
+                                        self.solomdb.start_payment(amount)
+                                        Thread(target=self.payment_thread).start()
                             case 'IDLE':
+                                # Should stop and refund payment
+                                if self.solomdb.payment_uuid:
+                                    self.solomdb.should_cancel = True
+                            case 'DISABLED':
                                 # Should stop and refund payment
                                 if self.solomdb.payment_uuid:
                                     self.solomdb.should_cancel = True
@@ -243,6 +291,9 @@ class MDBLineReader(LineReader):
             case 'r':
                 pass
 
+            case 'x':
+                pass
+
     def connection_lost(self, exc):
         #if exc:
         #    traceback.print_exc(exc)
@@ -250,19 +301,60 @@ class MDBLineReader(LineReader):
         sys.stdout.write('port closed\n')
 
 
+class RequestHandler(BaseHTTPRequestHandler):
+       def do_GET(self):
+           self.send_response(200)
+           self.send_header('Content-type', 'text/plain')
+           self.end_headers()
+           self.wfile.write("Hello World! You need to start the vending session with POST /start".encode('UTF-8'))
+
+       def do_POST(self):
+           self.send_response(200)
+           self.send_header('Content-type', 'text/plain')
+           self.end_headers()
+           self.wfile.write("thanks".encode('UTF-8'))
+           self.wfile.flush()
+
+           # start session
+           self.server.solomdb.start_session()
+
+class SoloMDBHTTPServer(HTTPServer):
+    def __init__(self, server_address, RequestHandlerClass, solomdb):
+        super().__init__(server_address, RequestHandlerClass)
+        self.solomdb = solomdb
+
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--pair-reader', action='store', dest='pairing_code')
+    argparser.add_argument('--name', action='store', dest='pairing_name')
+    argparser.add_argument('--host', action='store', dest='host', default='0.0.0.0')
+    argparser.add_argument('--port', action='store', dest='port', type=int, default=8000)
     args = argparser.parse_args()
 
     solomdb = SoloMDB()
 
     if args.pairing_code:
-        solomdb.pair_reader(args.pairing_code)
+        solomdb.pair_reader(args.pairing_code, args.pairing_name)
         sys.exit()
 
+    httpd = SoloMDBHTTPServer((args.host, args.port), RequestHandler, solomdb)
+
+    def start_http_server():
+        httpd.serve_forever()
+
+    httpd_thread = Thread(target=start_http_server)
+    httpd_thread.daemon = True
+
     try:
+        print("initing...")
         solomdb.init_mdb()
+        print("inited")
         solomdb.start_mdb()
+        print("mdb")
+        httpd_thread.start()
+        print("httpd")
+        solomdb.join()
     except KeyboardInterrupt:
         solomdb.stop_mdb()
+        httpd.shutdown()
+        httpd_thread.join()
