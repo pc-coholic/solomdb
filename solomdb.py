@@ -2,14 +2,18 @@
 import argparse
 import configparser
 import sys
+import time
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
-from threading import Thread
+from decimal import ROUND_HALF_UP, Decimal
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
 
 import requests
 import serial
+from requests import HTTPError
 from serial.threaded import ReaderThread
+
+from mdbdevices import GenericMdb
 
 
 class SoloMDB(object):
@@ -21,7 +25,8 @@ class SoloMDB(object):
         self.transaction_code = None
         self.vend_amount = None
         self.should_cancel = False
-        self.mdb_status = 'DISABLED'
+        self.mdb_status = "DISABLED"
+        self.mdb_device = GenericMdb
 
     def _readconfig(self):
         try:
@@ -112,7 +117,63 @@ class SoloMDB(object):
         req.raise_for_status()
         self.payment_uuid = payment_uuid
         print(req)
+
+        Thread(target=self.payment_thread).start()
         return self.payment_uuid
+
+    def refund_thread(self, transaction_code: str):
+        print(f"Trying to refund transaction {transaction_code}")
+        while True:
+            try:
+                self.refund_payment(self.transaction_code)
+            except HTTPError as err:
+                if err.response.status_code == 409:
+                    print(
+                        f"Refund error 409 for {transaction_code}; probably already refunded."
+                    )
+                    break
+                else:
+                    print("Refund error, retrying...")
+                    time.sleep(1)
+            else:
+                break
+
+    def payment_thread(self):
+        while True:
+            try:
+                data = self.get_payment(self.payment_uuid)
+                self.transaction_code = data.get("transaction_code")
+                payment_status = data.get("status")
+                payment_amount = data.get("amount")
+            except HTTPError as e:
+                print(f"Payment retrieval failed: {e}")
+            else:
+                print(f"Payment Status for {self.payment_uuid} is {payment_status}")
+                match payment_status:
+                    case "PENDING":
+                        if self.should_cancel:
+                            print("Trying to cancel payment on reader")
+                            self.cancel_payment()
+                        pass
+                    case "FAILED" | "CANCELLED":
+                        self.clear_payment_status()
+                        return
+                    case "SUCCESSFUL":
+                        if self.mdb_status == "VEND" and not self.should_cancel:
+                            print("Machine in state VEND, approving vend")
+                            self.mdb_device.approve(payment_amount)
+                            return
+                        else:
+                            print(
+                                "Machine not in state VEND or cancellation is requested, refunding"
+                            )
+                            self.refund_thread = Thread(
+                                target=self.refund_thread,
+                                args=[self.transaction_code],
+                            ).start()
+                            self.clear_payment_status()
+                            return
+            time.sleep(1)
 
     def get_payment(self, payment_uuid: str):
         req = requests.get(
@@ -171,14 +232,11 @@ class SoloMDB(object):
         self.mdb_thread.join()
 
     def stop_mdb(self):
-        if hasattr(self.mdb_device, 'stop_mdb_command'):
-            self.mdb_thread.write(f'{self.mdb_device.stop_mdb_command}\n'.encode('UTF-8'))
-
+        self.mdb_device.stop()
         self.mdb_thread.close()
 
     def start_session(self):
-        if hasattr(self.mdb_device, 'start_session_command'):
-            self.mdb_thread.write(f'{self.mdb_device.start_session_command}\n'.encode('UTF-8'))
+        self.mdb_device.start()
 
 
 class RequestHandler(BaseHTTPRequestHandler):
