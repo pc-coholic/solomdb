@@ -270,9 +270,12 @@ class MDBLineReader(LineReader):
                                     if Decimal(amount) == Decimal(self.solomdb.vend_amount):
                                         self.solomdb.should_cancel = False
                                 else:
-                                    self.solomdb.vend_amount = amount
-                                    self.solomdb.start_payment(amount)
-                                    Thread(target=self.payment_thread).start()
+                                    if amount < Decimal('1.0'):
+                                        print('Ignoring request for amount < 1.00 EUR')
+                                    else:
+                                        self.solomdb.vend_amount = amount
+                                        self.solomdb.start_payment(amount)
+                                        Thread(target=self.payment_thread).start()
                             case 'IDLE':
                                 # Should stop and refund payment
                                 if self.solomdb.payment_uuid:
