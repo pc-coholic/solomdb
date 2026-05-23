@@ -26,7 +26,6 @@ class SoloMDB(object):
         self.vend_amount = None
         self.should_cancel = False
         self.mdb_status = "DISABLED"
-        self.mdb_device = GenericMdb
 
     def _readconfig(self):
         try:
