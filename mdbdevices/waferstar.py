@@ -38,13 +38,17 @@ class Waferstar(FramedPacket):
         # http://www.mdbprotocol.com/NAMA/Mdb_protocol.pdf
         # page 125
         match cmd:
+            case b'01':
+                print("Current config data")
+                self.setup_config_data()
+            case b'09':
+                print("Current Max/Min Prices")
             case b'10':  # Reset
                 print("Reset")
             case b'11':  # Setup
                 match subcmd:
                     case b'00':
                         print("Config Data")
-                        self.setup_config_data()
                     case b'01':
                         print("Max/Min Prices")
             case b'12':  # Poll
