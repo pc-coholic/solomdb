@@ -5,8 +5,10 @@ from serial.threaded import FramedPacket
 
 from solomdb import SoloMDB
 
+from . import GenericMdb
 
-class Waferstar(FramedPacket):
+
+class Waferstar(FramedPacket, GenericMdb):
     START = b"\x02"
     STOP = b"\x03"
 
@@ -45,7 +47,6 @@ class Waferstar(FramedPacket):
             subcmd = payload.pop(0)
         else:
             subcmd = None
-        checksum = payload.pop()
 
         # http://www.mdbprotocol.com/NAMA/Mdb_protocol.pdf
         # page 125
@@ -69,6 +70,43 @@ class Waferstar(FramedPacket):
                 print("Polling (should never be posted here)")
             case b"\x13":  # Vend
                 print("Vend")
+                match subcmd:
+                    case b"\x00":
+                        print("Vend Request")
+                        price = [payload.pop(0), payload.pop(0)]
+                        itemno = [payload.pop(0), payload.pop(0)]
+
+                        price = [
+                            int.from_bytes(price[0], "big"),
+                            int.from_bytes(price[1], "big"),
+                        ]
+
+                        ## FIXME:
+                        # if amount < Decimal("1.0"):
+                        #    print("Ignoring request for amount < 1.00 EUR")
+                        # else:
+                        #    self.solomdb.vend_amount = amount
+                        #    self.solomdb.start_payment(amount)
+
+                        # approve with same price:
+                        self.send_command([0x05] + price)
+                        # reject:
+                        # self.send_command([0x06])
+                    case b"\x01":
+                        print("Vend Cancel")
+                    case b"\x02":
+                        print("Vend Success")
+                    case b"\x03":
+                        print("Vend Failure")
+                    case b"\x04":
+                        print("Session Complete")
+                        # end session
+                        self.send_command([0x07])
+                    case _:
+                        print("Unchecked Reader subcommand")
+
+                # approve
+                # session end
             case b"\x14":  # Reader
                 match subcmd:
                     case b"\x00":
@@ -95,6 +133,8 @@ class Waferstar(FramedPacket):
                         print("Unchecked Expansion subcommand")
             case _:
                 print("Unchecked Command")
+
+        checksum = payload.pop()
 
     def crc(self, command):
         return sum(command) & 0xFF
@@ -171,3 +211,7 @@ class Waferstar(FramedPacket):
         #    traceback.print_exc(exc)
         print(exc)
         sys.stdout.write("port closed\n")
+
+    def approve(self, payment_amount):
+        # FIXME: payment amount as two fields
+        self.send_command([0x05] + payment_amount)
