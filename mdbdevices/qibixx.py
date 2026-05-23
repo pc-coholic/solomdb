@@ -3,15 +3,13 @@ from decimal import Decimal
 
 from serial.threaded import LineReader
 
-from solomdb import SoloMDB
-
 from . import GenericMdb
 
 
 class Qibixx(LineReader, GenericMdb):
-    def __init__(self):
+    def __init__(self, solomdb):
         super().__init__()
-        self.solomdb = SoloMDB()
+        self.solomdb = solomdb
         self.transport = None
 
     def write_line(self, text: str) -> None:

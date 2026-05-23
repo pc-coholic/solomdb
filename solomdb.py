@@ -161,13 +161,13 @@ class SoloMDB(object):
                     case "SUCCESSFUL":
                         if self.mdb_status == "VEND" and not self.should_cancel:
                             print("Machine in state VEND, approving vend")
-                            self.mdb_device.approve(payment_amount)
+                            self.mdb_thread.protocol.approve(payment_amount)
                             return
                         else:
                             print(
                                 "Machine not in state VEND or cancellation is requested, refunding"
                             )
-                            self.refund_thread = Thread(
+                            Thread(
                                 target=self.refund_thread,
                                 args=[self.transaction_code],
                             ).start()
@@ -222,7 +222,7 @@ class SoloMDB(object):
             timeout=1,
         )
 
-        self.mdb_thread = ReaderThread(self.serial, self.mdb_device)
+        self.mdb_thread = ReaderThread(self.serial, lambda: self.mdb_device(self))
 
     def start_mdb(self):
         self.mdb_thread.start()
@@ -232,11 +232,12 @@ class SoloMDB(object):
         self.mdb_thread.join()
 
     def stop_mdb(self):
-        self.mdb_device.stop()
+        if self.mdb_thread.protocol:
+            self.mdb_thread.protocol.stop()
         self.mdb_thread.close()
 
     def start_session(self):
-        self.mdb_device.start()
+        self.mdb_thread.protocol.start()
 
 
 class RequestHandler(BaseHTTPRequestHandler):

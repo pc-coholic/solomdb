@@ -1,4 +1,8 @@
 class GenericMdb(object):
+    def __init__(self, solomdb=None):
+        super().__init__()
+        self.solomdb = solomdb
+
     def stop(self):
         return None
 

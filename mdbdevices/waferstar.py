@@ -3,8 +3,6 @@ import sys
 
 from serial.threaded import FramedPacket
 
-from solomdb import SoloMDB
-
 from . import GenericMdb
 
 
@@ -12,9 +10,9 @@ class Waferstar(FramedPacket, GenericMdb):
     START = b"\x02"
     STOP = b"\x03"
 
-    def __init__(self):
+    def __init__(self, solomdb):
         super().__init__()
-        self.solomdb = SoloMDB()
+        self.solomdb = solomdb
         self.transport = None
 
     def connection_made(self, transport):
