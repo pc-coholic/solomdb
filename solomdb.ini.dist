@@ -1,5 +1,5 @@
 [solomdb]
-type = qibixx|waferstar
+devicetype = qibixx|waferstar
 mdbdevice = /dev/ttyUSB0
 apikey = sup_sk_...
 affiliate_app_id = ...
