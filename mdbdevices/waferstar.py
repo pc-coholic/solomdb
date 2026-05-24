@@ -37,6 +37,10 @@ class Waferstar(FramedPacket, GenericMdb):
             print(e)
             return
 
+        if len(payload) == 0:
+            print("Got empty packet")
+            return
+
         cmd = payload.pop(0)
 
         if len(payload) == 0 and cmd in (b"\x00",):
