@@ -20,7 +20,8 @@ class Waferstar(FramedPacket, GenericMdb):
         super(Waferstar, self).connection_made(transport)
         self.transport = transport
         sys.stdout.write("port opened\n")
-        # ToDo: Setup-Code here
+        # In case we don't boot fast enough to catch the device booting
+        self.setup_config_data()
 
     def handle_packet(self, packet):
         sys.stdout.write("packet received: {}\n".format(repr(packet)))
@@ -101,6 +102,8 @@ class Waferstar(FramedPacket, GenericMdb):
                         print("Vend Cancel")
                         if self.solomdb.payment_uuid:
                             self.solomdb.should_cancel = True
+                        else:
+                            self.deny()
                     case b"\x02":
                         print("Vend Success")
                         self.solomdb.clear_payment_status()
@@ -166,7 +169,7 @@ class Waferstar(FramedPacket, GenericMdb):
                 0x01,  # Scale Factor
                 0x02,  # Decimal places
                 0x07,  # Application maximum response time (seconds)
-                0x01,  # Misc options (Supports VEND/CASH Subcommand)
+                0x00,  # Misc options
             ]
         )
 
