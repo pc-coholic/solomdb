@@ -162,6 +162,7 @@ class SoloMDB(object):
                         pass
                     case "FAILED" | "CANCELLED":
                         self.clear_payment_status()
+                        self.mdb_thread.protocol.deny()
                         return
                     case "SUCCESSFUL":
                         if self.mdb_status == "VEND" and not self.should_cancel:

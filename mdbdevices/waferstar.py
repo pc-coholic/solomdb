@@ -211,9 +211,6 @@ class Waferstar(FramedPacket, GenericMdb):
             ]
         )
 
-    def setup_min_max_prices(self):
-        pass
-
     def handle_out_of_packet_data(self, data):
         sys.stdout.write("out_of_packet_data: {}\n".format(repr(data)))
 
@@ -228,3 +225,6 @@ class Waferstar(FramedPacket, GenericMdb):
         price_hi = (price_cents >> 8) & 0xFF
         price_lo = price_cents & 0xFF
         self.send_command([0x05, price_hi, price_lo])
+
+    def deny(self):
+        self.send_command([0x06])

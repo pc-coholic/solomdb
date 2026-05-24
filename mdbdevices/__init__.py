@@ -12,6 +12,9 @@ class GenericMdb(object):
     def approve(self, payment_amount):
         return None
 
+    def deny(self):
+        return None
+
     def connection_made(self, transport):
         yield
 
