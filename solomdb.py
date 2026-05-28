@@ -115,7 +115,7 @@ class SoloMDB(object):
                     "value": value,
                     "minor_unit": 2,
                 },
-                "description": "Snack",
+                "description": self.config.get("sale_description", "SoloMDB"),
             },
         )
 
