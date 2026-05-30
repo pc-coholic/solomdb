@@ -13,8 +13,6 @@ import serial
 from requests import HTTPError
 from serial.threaded import ReaderThread
 
-from mdbdevices import GenericMdb
-
 
 class SoloMDB(object):
     def __init__(self):
