@@ -117,9 +117,10 @@ class SoloMDB(object):
             },
         )
 
+        print(req)
+        print(req.text)
         req.raise_for_status()
         self.payment_uuid = payment_uuid
-        print(req)
 
         Thread(target=self.payment_thread).start()
         return self.payment_uuid
