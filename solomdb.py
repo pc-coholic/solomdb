@@ -20,7 +20,7 @@ class SoloMDB(object):
         self._readconfig()
         self.serial = None
         self.payment_uuid = None
-        self.transaction_code = None
+        self.transaction_id = None
         self.vend_amount = None
         self.should_cancel = False
         self.mdb_status = "DISABLED"
@@ -124,15 +124,15 @@ class SoloMDB(object):
         Thread(target=self.payment_thread).start()
         return self.payment_uuid
 
-    def refund_thread(self, transaction_code: str):
-        print(f"Trying to refund transaction {transaction_code}")
+    def refund_thread(self, transaction_id: str):
+        print(f"Trying to refund transaction {transaction_id}")
         while True:
             try:
-                self.refund_payment(self.transaction_code)
+                self.refund_payment(self.transaction_id)
             except HTTPError as err:
                 if err.response.status_code == 409:
                     print(
-                        f"Refund error 409 for {transaction_code}; probably already refunded."
+                        f"Refund error 409 for {transaction_id}; probably already refunded."
                     )
                     break
                 else:
@@ -145,7 +145,7 @@ class SoloMDB(object):
         while True:
             try:
                 data = self.get_payment(self.payment_uuid)
-                self.transaction_code = data.get("transaction_code")
+                self.transaction_id = data.get("transaction_id")
                 payment_status = data.get("status")
                 payment_amount = data.get("amount")
             except HTTPError as e:
@@ -173,15 +173,17 @@ class SoloMDB(object):
                             )
                             Thread(
                                 target=self.refund_thread,
-                                args=[self.transaction_code],
+                                args=[self.transaction_id],
                             ).start()
                             self.clear_payment_status()
                             return
             time.sleep(1)
 
     def get_payment(self, payment_uuid: str):
+        merchant_code = self._get_merchant_profile()
+
         req = requests.get(
-            f"https://api.sumup.com/v0.1/me/transactions?foreign_transaction_id={payment_uuid}",
+            f'https://api.sumup.com/v2.1/merchants/{merchant_code}/transactions?foreign_transaction_id={payment_uuid}',
             headers=self.__sumup_headers(),
         )
 
@@ -202,9 +204,11 @@ class SoloMDB(object):
 
         return True
 
-    def refund_payment(self, transaction_code: str):
+    def refund_payment(self, transaction_id: str):
+        merchant_code = self._get_merchant_profile()
+
         req = requests.post(
-            f"https://api.sumup.com/v0.1/me/refund/{transaction_code}",
+            f'https://api.sumup.com/v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds',
             headers=self.__sumup_headers(),
             timeout=10,
         )
@@ -213,7 +217,7 @@ class SoloMDB(object):
 
     def clear_payment_status(self):
         self.payment_uuid = None
-        self.transaction_code = None
+        self.transaction_id = None
         self.should_cancel = False
 
     def init_mdb(self):
