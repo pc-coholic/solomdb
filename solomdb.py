@@ -39,11 +39,11 @@ class SoloMDB(object):
             if self.config.get("devicetype") == "qibixx":
                 from mdbdevices.qibixx import Qibixx
 
-                self.mdb_device = Qibixx
+                self.mdb_device_class = Qibixx
             elif self.config.get("devicetype") == "waferstar":
                 from mdbdevices.waferstar import Waferstar
 
-                self.mdb_device = Waferstar
+                self.mdb_device_class = Waferstar
             else:
                 raise Exception("Unknown MDB device type")
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
@@ -226,7 +226,7 @@ class SoloMDB(object):
             timeout=1,
         )
 
-        self.mdb_thread = ReaderThread(self.serial, lambda: self.mdb_device(self))
+        self.mdb_thread = ReaderThread(self.serial, lambda: self.mdb_device_class(self))
 
     def start_mdb(self):
         self.mdb_thread.start()

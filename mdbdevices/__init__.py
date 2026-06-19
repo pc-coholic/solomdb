@@ -4,10 +4,10 @@ class GenericMdb(object):
         self.solomdb = solomdb
 
     def stop(self):
-        return None
+        pass
 
     def start(self):
-        return None
+        pass
 
     def approve(self, payment_amount):
         return None
@@ -16,7 +16,7 @@ class GenericMdb(object):
         return None
 
     def connection_made(self, transport):
-        yield
+        pass
 
     def connection_lost(self, exc):
-        yield
+        pass
