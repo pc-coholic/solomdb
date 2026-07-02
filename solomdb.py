@@ -152,41 +152,53 @@ class SoloMDB(object):
                 break
 
     def payment_thread(self):
+        consecutive_errors = 0
         while True:
             try:
                 data = self.get_payment(self.payment_uuid)
+                consecutive_errors = 0
                 self.transaction_id = data.get("transaction_id")
                 payment_status = data.get("status")
                 payment_amount = data.get("amount")
-            except HTTPError as e:
-                print(f"Payment retrieval failed: {e}")
-            else:
-                print(f"Payment Status for {self.payment_uuid} is {payment_status}")
-                match payment_status:
-                    case "PENDING":
-                        if self.should_cancel:
-                            print("Trying to cancel payment on reader")
+            except requests.exceptions.RequestException as e:
+                consecutive_errors += 1
+                print(f"Payment retrieval failed ({consecutive_errors}/5): {e}")
+                if consecutive_errors >= 5:
+                    print("Too many consecutive API errors, aborting payment")
+                    self.clear_payment_status()
+                    self.mdb_thread.protocol.deny()
+                    return
+                time.sleep(1)
+                continue
+
+            print(f"Payment Status for {self.payment_uuid} is {payment_status}")
+            match payment_status:
+                case "PENDING":
+                    if self.should_cancel:
+                        print("Trying to cancel payment on reader")
+                        try:
                             self.cancel_payment()
-                        pass
-                    case "FAILED" | "CANCELLED":
-                        self.clear_payment_status()
-                        self.mdb_thread.protocol.deny()
+                        except requests.exceptions.RequestException as e:
+                            print(f"Cancel payment failed: {e}")
+                case "FAILED" | "CANCELLED":
+                    self.clear_payment_status()
+                    self.mdb_thread.protocol.deny()
+                    return
+                case "SUCCESSFUL":
+                    if self.mdb_status == "VEND" and not self.should_cancel:
+                        print("Machine in state VEND, approving vend")
+                        self.mdb_thread.protocol.approve(payment_amount)
                         return
-                    case "SUCCESSFUL":
-                        if self.mdb_status == "VEND" and not self.should_cancel:
-                            print("Machine in state VEND, approving vend")
-                            self.mdb_thread.protocol.approve(payment_amount)
-                            return
-                        else:
-                            print(
-                                "Machine not in state VEND or cancellation is requested, refunding"
-                            )
-                            Thread(
-                                target=self.refund_thread,
-                                args=[self.transaction_id],
-                            ).start()
-                            self.clear_payment_status()
-                            return
+                    else:
+                        print(
+                            "Machine not in state VEND or cancellation is requested, refunding"
+                        )
+                        Thread(
+                            target=self.refund_thread,
+                            args=[self.transaction_id],
+                        ).start()
+                        self.clear_payment_status()
+                        return
             time.sleep(1)
 
     def get_payment(self, payment_uuid: str):
