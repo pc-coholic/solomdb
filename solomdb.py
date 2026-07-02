@@ -99,27 +99,33 @@ class SoloMDB(object):
 
         value = int(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100)
 
-        req = requests.post(
-            f"https://api.sumup.com/v0.1/merchants/{self.config.get('merchant_code')}/readers/{self.config.get('reader')}/checkout",
-            headers=self.__sumup_headers(),
-            json={
-                "affiliate": {
-                    "app_id": self.config.get("affiliate_app_id"),
-                    "key": self.config.get("affiliate_key"),
-                    "foreign_transaction_id": payment_uuid,
+        try:
+            req = requests.post(
+                f"https://api.sumup.com/v0.1/merchants/{self.config.get('merchant_code')}/readers/{self.config.get('reader')}/checkout",
+                headers=self.__sumup_headers(),
+                json={
+                    "affiliate": {
+                        "app_id": self.config.get("affiliate_app_id"),
+                        "key": self.config.get("affiliate_key"),
+                        "foreign_transaction_id": payment_uuid,
+                    },
+                    "total_amount": {
+                        "currency": self.config.get("currency"),
+                        "value": value,
+                        "minor_unit": 2,
+                    },
+                    "description": self.config.get("sale_description", "SoloMDB"),
                 },
-                "total_amount": {
-                    "currency": self.config.get("currency"),
-                    "value": value,
-                    "minor_unit": 2,
-                },
-                "description": self.config.get("sale_description", "SoloMDB"),
-            },
-        )
+                timeout=10,
+            )
+            print(req)
+            print(req.text)
+            req.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"Checkout creation failed: {e}")
+            self.mdb_thread.protocol.deny()
+            return None
 
-        print(req)
-        print(req.text)
-        req.raise_for_status()
         self.payment_uuid = payment_uuid
 
         Thread(target=self.payment_thread).start()
@@ -139,6 +145,9 @@ class SoloMDB(object):
                 else:
                     print("Refund error, retrying...")
                     time.sleep(1)
+            except requests.exceptions.RequestException as err:
+                print(f"Refund network error, retrying: {err}")
+                time.sleep(1)
             else:
                 break
 
