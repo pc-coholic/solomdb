@@ -195,6 +195,7 @@ class SoloMDB(object):
         req = requests.get(
             f'https://api.sumup.com/v2.1/merchants/{merchant_code}/transactions?foreign_transaction_id={payment_uuid}',
             headers=self.__sumup_headers(),
+            timeout=10,
         )
 
         req.raise_for_status()
