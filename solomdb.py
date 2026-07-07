@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import configparser
+import decimal
 import sys
 import time
 import uuid
@@ -46,6 +47,12 @@ class SoloMDB(object):
                 self.mdb_device_class = Waferstar
             else:
                 raise Exception("Unknown MDB device type")
+
+            # Set the minimum sale amount
+            try:
+                self.config.min_sale_amount = Decimal(self.config.get("min_sale_amount", "1.0"))
+            except decimal.DecimalException:
+                self.config.min_sale_amount = Decimal("1.0")
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
             print(e)
             sys.exit()
