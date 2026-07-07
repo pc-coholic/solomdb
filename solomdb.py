@@ -50,9 +50,9 @@ class SoloMDB(object):
 
             # Set the minimum sale amount
             try:
-                self.config.min_sale_amount = Decimal(self.config.get("min_sale_amount", "1.0"))
+                self.min_sale_amount = Decimal(self.config.get("min_sale_amount", "1.0"))
             except decimal.DecimalException:
-                self.config.min_sale_amount = Decimal("1.0")
+                self.min_sale_amount = Decimal("1.0")
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
             print(e)
             sys.exit()

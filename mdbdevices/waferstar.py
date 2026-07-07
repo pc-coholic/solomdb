@@ -96,8 +96,8 @@ class Waferstar(FramedPacket, GenericMdb):
                             # Same price, we can reuse the payment
                             if amount == Decimal(self.solomdb.vend_amount):
                                 self.solomdb.should_cancel = False
-                        elif amount < self.solomdb.config.get("min_sale_amount"):
-                            print(f"Ignoring request for amount < {str(self.solomdb.config.get('min_sale_amount'))} EUR")
+                        elif amount < self.solomdb.min_sale_amount:
+                            print(f"Ignoring request for amount < {str(self.solomdb.min_sale_amount)} EUR")
                             self.send_command([0x06])  # reject
                         else:
                             self.solomdb.vend_amount = amount

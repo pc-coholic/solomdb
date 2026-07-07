@@ -66,8 +66,8 @@ class Qibixx(LineReader, GenericMdb):
                                     ):
                                         self.solomdb.should_cancel = False
                                 else:
-                                    if amount < self.solomdb.config.get("min_sale_amount"):
-                                        print(f"Ignoring request for amount < {str(self.solomdb.config.get('min_sale_amount'))} EUR")
+                                    if amount < self.solomdb.min_sale_amount:
+                                        print(f"Ignoring request for amount < {str(self.solomdb.min_sale_amount)} EUR")
                                     else:
                                         self.solomdb.vend_amount = amount
                                         self.solomdb.start_payment(amount)
