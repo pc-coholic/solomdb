@@ -152,7 +152,10 @@ class Waferstar(FramedPacket, GenericMdb):
             case _:
                 print("Unchecked Command")
 
-        checksum = payload.pop()
+        try:
+            checksum = payload.pop()
+        except IndexError:
+            pass
 
     def crc(self, command):
         return sum(command) & 0xFF
