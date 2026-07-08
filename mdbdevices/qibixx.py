@@ -29,6 +29,9 @@ class Qibixx(LineReader, GenericMdb):
     def approve(self, payment_amount):
         self.write_line(f"C,VEND,{payment_amount}")
 
+    def deny(self):
+        self.write_line(f"C,VEND,-1")
+
     def handle_line(self, data):
         sys.stdout.write("line received: {}\n".format(repr(data)))
 
