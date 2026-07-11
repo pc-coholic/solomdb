@@ -127,6 +127,16 @@ You could then set up a small daemon listening to a GPIO button press to send th
 set up a button connected to your [Home Assistant](https://www.home-assistant.io/). Or perhaps 
 you'd prefer a solution with [ESPHome](https://esphome.io/)? The sky is the limit!
 
+solomdb.ini config options
+--------------------------
+- `devicetype` (required): either `qibixx` or `waferstar`, depending on your MDB interface
+- `mdbdevice` (required): path like `/dev/ttyUSB0` to the MDB interface
+- `apikey` (required): SumUp API-key starting wit `sup_sk_`
+- `affiliate_app_id` (required): SumUp Affiliate Application ID
+- `affiliate_key` (required): SumUp Affiliate Key
+- `sale_description` (optional): Descriptor of the transaction shown in SumUp backend and receipt. Defaults to `SoloMDB`
+- `min_sale_amount` (optional): Minimum sale amount supported by SumUp/the terminal. Defaults to 1.00 Euro
+
 Known working environments
 --------------------------
 - Sielaff FS1500 with Qibixx interface at [Temporärhaus](https://wiki.temporaerhaus.de/spiralautomat/sielaff-fs-1500)
