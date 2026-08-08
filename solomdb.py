@@ -138,8 +138,17 @@ class SoloMDB(object):
         Thread(target=self.payment_thread).start()
         return self.payment_uuid
 
+    def do_refund(self, transaction_id: str):
+        Thread(
+            target=self.refund_thread,
+            args=[transaction_id],
+        ).start()
+        self.clear_payment_status()
+        self.mdb_thread.protocol.deny()
+
     def refund_thread(self, transaction_id: str):
         print(f"Trying to refund transaction {transaction_id}")
+        consecutive_errors = 0
         while True:
             try:
                 self.refund_payment(self.transaction_id)
@@ -150,13 +159,21 @@ class SoloMDB(object):
                     )
                     break
                 else:
-                    print("Refund error, retrying...")
+                    consecutive_errors += 1
+                    print(f"Refunding failed ({consecutive_errors}/5): {err}")
+                    if consecutive_errors >= 5:
+                        print("Too many consecutive API errors, aborting refund")
                     time.sleep(1)
             except requests.exceptions.RequestException as err:
-                print(f"Refund network error, retrying: {err}")
+                consecutive_errors += 1
+                print(f"Refunding network error ({consecutive_errors}/5): {err}")
+                if consecutive_errors >= 5:
+                    print("Too many consecutive API errors, aborting refund")
                 time.sleep(1)
             else:
                 break
+
+        self.mdb_thread.protocol.deny()
 
     def payment_thread(self):
         consecutive_errors = 0
