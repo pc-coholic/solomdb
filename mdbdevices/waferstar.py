@@ -74,6 +74,7 @@ class Waferstar(FramedPacket, GenericMdb):
                 print("Polling (should never be posted here)")
             case b"\x13":  # Vend
                 print("Vend")
+                print(self.solomdb.payment_uuid, self.solomdb.transaction_id)
                 match subcmd:
                     case b"\x00":
                         print("Vend Request")
@@ -112,7 +113,6 @@ class Waferstar(FramedPacket, GenericMdb):
                             self.deny()
                     case b"\x02":
                         print("Vend Success")
-                        self.solomdb.clear_payment_status()
                     case b"\x03":
                         print("Vend Failure")
                         if self.solomdb.payment_uuid:
@@ -121,6 +121,7 @@ class Waferstar(FramedPacket, GenericMdb):
                                 self.solomdb.do_refund(self.solomdb.transaction_id)
                     case b"\x04":
                         print("Session Complete")
+                        self.solomdb.clear_payment_status()
                         # end session
                         self.send_command([0x07])
                     case _:

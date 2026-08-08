@@ -143,15 +143,13 @@ class SoloMDB(object):
             target=self.refund_thread,
             args=[transaction_id],
         ).start()
-        self.clear_payment_status()
-        self.mdb_thread.protocol.deny()
 
     def refund_thread(self, transaction_id: str):
         print(f"Trying to refund transaction {transaction_id}")
         consecutive_errors = 0
         while True:
             try:
-                self.refund_payment(self.transaction_id)
+                self.refund_payment(transaction_id)
             except HTTPError as err:
                 if err.response.status_code == 409:
                     print(
@@ -173,6 +171,7 @@ class SoloMDB(object):
             else:
                 break
 
+        self.clear_payment_status()
         self.mdb_thread.protocol.deny()
 
     def payment_thread(self):
@@ -263,6 +262,7 @@ class SoloMDB(object):
         req.raise_for_status()
 
     def clear_payment_status(self):
+        print(f"Clearing payment status for UUID {self.payment_uuid}, TID {self.transaction_id}, Should Cancel Flag: {self.should_cancel}")
         self.payment_uuid = None
         self.transaction_id = None
         self.should_cancel = False
