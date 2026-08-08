@@ -180,7 +180,7 @@ class SoloMDB(object):
             try:
                 data = self.get_payment(self.payment_uuid)
                 consecutive_errors = 0
-                self.transaction_id = data.get("transaction_id")
+                self.transaction_id = data.get("transaction_code")
                 payment_status = data.get("status")
                 payment_amount = data.get("amount")
             except requests.exceptions.RequestException as e:
