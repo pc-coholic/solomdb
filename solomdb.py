@@ -138,12 +138,6 @@ class SoloMDB(object):
         Thread(target=self.payment_thread).start()
         return self.payment_uuid
 
-    def do_refund(self, transaction_id: str):
-        Thread(
-            target=self.refund_thread,
-            args=[transaction_id],
-        ).start()
-
     def refund_thread(self, transaction_id: str):
         print(f"Trying to refund transaction {transaction_id}")
         consecutive_errors = 0
@@ -208,21 +202,38 @@ class SoloMDB(object):
                     self.mdb_thread.protocol.deny()
                     return
                 case "SUCCESSFUL":
-                    if self.mdb_status == "VEND" and not self.should_cancel:
+                    break
+            time.sleep(1)
+
+        if self.mdb_status == "VEND":
+            did_vend = False
+            while True:
+                if self.should_cancel:
+                    print("Cancellation is requested, refunding")
+                    Thread(
+                        target=self.refund_thread,
+                        args=[self.transaction_id],
+                    ).start()
+                    self.clear_payment_status()
+                    return
+                else:
+                    if did_vend:
+                        time.sleep(1)
+                        continue
+                    else:
                         print("Machine in state VEND, approving vend")
                         self.mdb_thread.protocol.approve(payment_amount)
-                        return
-                    else:
-                        print(
-                            "Machine not in state VEND or cancellation is requested, refunding"
-                        )
-                        Thread(
-                            target=self.refund_thread,
-                            args=[self.transaction_id],
-                        ).start()
-                        self.clear_payment_status()
-                        return
-            time.sleep(1)
+                        did_vend = True
+                        time.sleep(1)
+                        continue
+        else:
+            print("Machine not in VEND state, refunding")
+            Thread(
+                target=self.refund_thread,
+                args=[self.transaction_id],
+            ).start()
+            self.clear_payment_status()
+            return
 
     def get_payment(self, payment_uuid: str):
         merchant_code = self._get_merchant_profile()

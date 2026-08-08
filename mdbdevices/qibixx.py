@@ -48,8 +48,6 @@ class Qibixx(LineReader, GenericMdb):
                             case "VEND 1":
                                 if self.solomdb.payment_uuid is not None:
                                     self.solomdb.should_cancel = True
-                                    if self.solomdb.transaction_id:
-                                        self.solomdb.do_refund(self.solomdb.transaction_id)
                             # Fixme c,ERR,VEND 3...
                             case _:
                                 print("An error occurred, stopping interface")
@@ -81,14 +79,10 @@ class Qibixx(LineReader, GenericMdb):
                                 # Should stop and refund payment
                                 if self.solomdb.payment_uuid:
                                     self.solomdb.should_cancel = True
-                                    if self.solomdb.transaction_id:
-                                        self.solomdb.do_refund(self.solomdb.transaction_id)
                             case "DISABLED":
                                 # Should stop and refund payment
                                 if self.solomdb.payment_uuid:
                                     self.solomdb.should_cancel = True
-                                    if self.solomdb.transaction_id:
-                                        self.solomdb.do_refund(self.solomdb.transaction_id)
                     case "VEND":
                         if payload[1] == "SUCCESS":
                             print("Payment successful, Distribution successful")

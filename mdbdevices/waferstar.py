@@ -107,8 +107,6 @@ class Waferstar(FramedPacket, GenericMdb):
                         print("Vend Cancel")
                         if self.solomdb.payment_uuid:
                             self.solomdb.should_cancel = True
-                            if self.solomdb.transaction_id:
-                                self.solomdb.do_refund(self.solomdb.transaction_id)
                         else:
                             self.deny()
                     case b"\x02":
@@ -117,8 +115,6 @@ class Waferstar(FramedPacket, GenericMdb):
                         print("Vend Failure")
                         if self.solomdb.payment_uuid:
                             self.solomdb.should_cancel = True
-                            if self.solomdb.transaction_id:
-                                self.solomdb.do_refund(self.solomdb.transaction_id)
                     case b"\x04":
                         print("Session Complete")
                         self.solomdb.clear_payment_status()
@@ -133,8 +129,6 @@ class Waferstar(FramedPacket, GenericMdb):
                         self.solomdb.mdb_status = "DISABLED"
                         if self.solomdb.payment_uuid:
                             self.solomdb.should_cancel = True
-                            if self.solomdb.transaction_id:
-                                self.solomdb.do_refund(self.solomdb.transaction_id)
                     case b"\x01":
                         print("Reader enabled")
                         self.solomdb.mdb_status = "IDLE"
