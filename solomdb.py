@@ -161,12 +161,14 @@ class SoloMDB(object):
                     print(f"Refunding failed ({consecutive_errors}/5): {err}")
                     if consecutive_errors >= 5:
                         print("Too many consecutive API errors, aborting refund")
+                        break
                     time.sleep(1)
             except requests.exceptions.RequestException as err:
                 consecutive_errors += 1
                 print(f"Refunding network error ({consecutive_errors}/5): {err}")
                 if consecutive_errors >= 5:
                     print("Too many consecutive API errors, aborting refund")
+                    break
                 time.sleep(1)
             else:
                 break
