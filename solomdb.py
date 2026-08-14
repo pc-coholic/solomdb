@@ -23,7 +23,6 @@ class SoloMDB(object):
         self.payment_uuid = None
         self.transaction_id = None
         self.vend_amount = None
-        self.should_cancel = False
         self.mdb_status = "DISABLED"
 
     def _readconfig(self):
@@ -140,9 +139,10 @@ class SoloMDB(object):
 
     def refund_thread(self, transaction_id: str):
         print(f"Trying to refund transaction {transaction_id}")
+        consecutive_errors = 0
         while True:
             try:
-                self.refund_payment(self.transaction_id)
+                self.refund_payment(transaction_id)
             except HTTPError as err:
                 if err.response.status_code == 409:
                     print(
@@ -150,10 +150,18 @@ class SoloMDB(object):
                     )
                     break
                 else:
-                    print("Refund error, retrying...")
+                    consecutive_errors += 1
+                    print(f"Refunding failed ({consecutive_errors}/5): {err}")
+                    if consecutive_errors >= 5:
+                        print("Too many consecutive API errors, aborting refund")
+                        break
                     time.sleep(1)
             except requests.exceptions.RequestException as err:
-                print(f"Refund network error, retrying: {err}")
+                consecutive_errors += 1
+                print(f"Refunding network error ({consecutive_errors}/5): {err}")
+                if consecutive_errors >= 5:
+                    print("Too many consecutive API errors, aborting refund")
+                    break
                 time.sleep(1)
             else:
                 break
@@ -164,7 +172,7 @@ class SoloMDB(object):
             try:
                 data = self.get_payment(self.payment_uuid)
                 consecutive_errors = 0
-                self.transaction_id = data.get("transaction_id")
+                self.transaction_id = data.get("transaction_code")
                 payment_status = data.get("status")
                 payment_amount = data.get("amount")
             except requests.exceptions.RequestException as e:
@@ -181,18 +189,13 @@ class SoloMDB(object):
             print(f"Payment Status for {self.payment_uuid} is {payment_status}")
             match payment_status:
                 case "PENDING":
-                    if self.should_cancel:
-                        print("Trying to cancel payment on reader")
-                        try:
-                            self.cancel_payment()
-                        except requests.exceptions.RequestException as e:
-                            print(f"Cancel payment failed: {e}")
+                    pass
                 case "FAILED" | "CANCELLED":
                     self.clear_payment_status()
                     self.mdb_thread.protocol.deny()
                     return
                 case "SUCCESSFUL":
-                    if self.mdb_status == "VEND" and not self.should_cancel:
+                    if self.mdb_status == "VEND":
                         print("Machine in state VEND, approving vend")
                         self.mdb_thread.protocol.approve(payment_amount)
                         return
@@ -200,11 +203,7 @@ class SoloMDB(object):
                         print(
                             "Machine not in state VEND or cancellation is requested, refunding"
                         )
-                        Thread(
-                            target=self.refund_thread,
-                            args=[self.transaction_id],
-                        ).start()
-                        self.clear_payment_status()
+                        self.cancel_or_refund()
                         return
             time.sleep(1)
 
@@ -222,6 +221,7 @@ class SoloMDB(object):
         return req.json()
 
     def cancel_payment(self):
+        print("Try to cancel payment on reader")
         merchant_code = self._get_merchant_profile()
         reader_id = self.config.get("reader")
 
@@ -233,6 +233,21 @@ class SoloMDB(object):
         req.raise_for_status()
 
         return True
+
+    def cancel_or_refund(self):
+        try:
+            self.cancel_payment()
+        except:
+            pass
+
+        if self.transaction_id:
+            Thread(
+                target=self.refund_thread,
+                args=[self.transaction_id],
+            ).start()
+
+        self.clear_payment_status()
+        self.mdb_thread.protocol.deny()
 
     def refund_payment(self, transaction_id: str):
         merchant_code = self._get_merchant_profile()
@@ -246,9 +261,9 @@ class SoloMDB(object):
         req.raise_for_status()
 
     def clear_payment_status(self):
+        print(f"Clearing payment status for UUID {self.payment_uuid}, TID {self.transaction_id}")
         self.payment_uuid = None
         self.transaction_id = None
-        self.should_cancel = False
 
     def init_mdb(self):
         self.serial = serial.serial_for_url(

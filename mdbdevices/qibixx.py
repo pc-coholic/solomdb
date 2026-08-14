@@ -46,8 +46,7 @@ class Qibixx(LineReader, GenericMdb):
                     case "ERR":
                         match payload[1]:
                             case "VEND 1":
-                                if self.solomdb.payment_uuid is not None:
-                                    self.solomdb.should_cancel = True
+                                self.solomdb.cancel_or_refund()
                             # Fixme c,ERR,VEND 3...
                             case _:
                                 print("An error occurred, stopping interface")
@@ -58,31 +57,18 @@ class Qibixx(LineReader, GenericMdb):
                             case "VEND":
                                 amount = Decimal(payload[2])
                                 print(f"Requesting payment of {amount}")
-                                if self.solomdb.payment_uuid is not None:
-                                    print(
-                                        f"Previous payment_uuid {self.solomdb.payment_uuid} present; not charging again"
-                                    )
-
-                                    # Same price, we can reuse the payment
-                                    if Decimal(amount) == Decimal(
-                                        self.solomdb.vend_amount
-                                    ):
-                                        self.solomdb.should_cancel = False
+                                if amount < self.solomdb.min_sale_amount:
+                                    print(f"Ignoring request for amount < {str(self.solomdb.min_sale_amount)} EUR")
                                 else:
-                                    if amount < self.solomdb.min_sale_amount:
-                                        print(f"Ignoring request for amount < {str(self.solomdb.min_sale_amount)} EUR")
-                                    else:
-                                        self.solomdb.vend_amount = amount
-                                        self.solomdb.start_payment(amount)
+                                    self.solomdb.vend_amount = amount
+                                    self.solomdb.start_payment(amount)
 
                             case "IDLE":
                                 # Should stop and refund payment
-                                if self.solomdb.payment_uuid:
-                                    self.solomdb.should_cancel = True
+                                self.solomdb.cancel_or_refund()
                             case "DISABLED":
                                 # Should stop and refund payment
-                                if self.solomdb.payment_uuid:
-                                    self.solomdb.should_cancel = True
+                                self.solomdb.cancel_or_refund()
                     case "VEND":
                         if payload[1] == "SUCCESS":
                             print("Payment successful, Distribution successful")

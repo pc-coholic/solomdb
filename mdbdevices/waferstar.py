@@ -89,14 +89,7 @@ class Waferstar(FramedPacket, GenericMdb):
                         self.solomdb.mdb_status = "VEND"
                         print(f"Requesting payment of {amount}")
 
-                        if self.solomdb.payment_uuid is not None:
-                            print(
-                                f"Previous payment_uuid {self.solomdb.payment_uuid} present; not charging again"
-                            )
-                            # Same price, we can reuse the payment
-                            if amount == Decimal(self.solomdb.vend_amount):
-                                self.solomdb.should_cancel = False
-                        elif amount < self.solomdb.min_sale_amount:
+                        if amount < self.solomdb.min_sale_amount:
                             print(f"Ignoring request for amount < {str(self.solomdb.min_sale_amount)} EUR")
                             self.send_command([0x06])  # reject
                         else:
@@ -104,19 +97,15 @@ class Waferstar(FramedPacket, GenericMdb):
                             self.solomdb.start_payment(amount)
                     case b"\x01":
                         print("Vend Cancel")
-                        if self.solomdb.payment_uuid:
-                            self.solomdb.should_cancel = True
-                        else:
-                            self.deny()
+                        self.solomdb.cancel_or_refund()
                     case b"\x02":
                         print("Vend Success")
-                        self.solomdb.clear_payment_status()
                     case b"\x03":
                         print("Vend Failure")
-                        if self.solomdb.payment_uuid:
-                            self.solomdb.should_cancel = True
+                        self.solomdb.cancel_or_refund()
                     case b"\x04":
                         print("Session Complete")
+                        self.solomdb.clear_payment_status()
                         # end session
                         self.send_command([0x07])
                     case _:
@@ -126,8 +115,7 @@ class Waferstar(FramedPacket, GenericMdb):
                     case b"\x00":
                         print("Reader disabled")
                         self.solomdb.mdb_status = "DISABLED"
-                        if self.solomdb.payment_uuid:
-                            self.solomdb.should_cancel = True
+                        self.solomdb.cancel_or_refund()
                     case b"\x01":
                         print("Reader enabled")
                         self.solomdb.mdb_status = "IDLE"
